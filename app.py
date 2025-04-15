@@ -87,7 +87,7 @@ for q in suggested:
     st.markdown(f"- {q}")
 
 # Question Input + Submit
-question = st.text_input("❓ Ask your legal question here")
+question = st.selectbox("❓ Ask your legal question here")
 submit = st.button("🚀 Submit Question")
 
 if uploaded_pdf and submit and question:
