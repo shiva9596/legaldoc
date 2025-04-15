@@ -2,6 +2,8 @@ streamlit
 PyPDF2
 docx2txt
 langchain
+langchain-community
 openai
+cohere
 faiss-cpu
 python-dotenv
