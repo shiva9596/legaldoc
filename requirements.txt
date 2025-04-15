@@ -1,9 +1,9 @@
+langchain==0.1.17
+langchain-community==0.0.21
+cohere==4.38
 streamlit
 PyPDF2
 docx2txt
-langchain
-langchain-community
 openai
-cohere
 faiss-cpu
 python-dotenv
