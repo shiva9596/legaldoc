@@ -36,15 +36,11 @@ st.markdown("""
         margin-bottom: 0.3em;
     }
 
-    .stFileUploader, .stTextInput, .stButton {
+    .stFileUploader, .stTextInput, .stSelectbox, .stButton {
         background-color: rgba(255, 255, 255, 0.75);
         padding: 15px;
         border-radius: 10px;
         box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
-    }
-
-    .element-container h3 {
-        color: #6a1b9a;
     }
 
     .stMarkdown {
@@ -75,22 +71,22 @@ os.environ["COHERE_API_KEY"] = cohere_key
 # Upload PDF
 uploaded_pdf = st.file_uploader("📎 Upload a legal PDF", type=["pdf"])
 
-# Suggested Questions
-st.markdown("### 💡 Suggested Questions")
+# Dropdown Suggested Questions
 suggested = [
+    "Select a question...",
     "What are the key obligations mentioned in the document?",
     "Is there any mention of termination clauses?",
     "What rights does the tenant have?",
     "Does the contract mention penalties or liabilities?"
 ]
-for q in suggested:
-    st.markdown(f"- {q}")
 
-# Question Input + Submit
-question = st.selectbox("❓ Ask your legal question here")
+question = st.selectbox("❓ Ask your legal question here", options=suggested)
+
+# Submit Button
 submit = st.button("🚀 Submit Question")
 
-if uploaded_pdf and submit and question:
+# Run model if conditions met
+if uploaded_pdf and submit and question != suggested[0]:
     with st.spinner("Processing your document and question..."):
 
         # Extract PDF text
@@ -132,3 +128,13 @@ Answer:"""
         )
 
         # Get Answer
+        try:
+            response = qa_chain.run(question)
+            st.success("📬 AI-generated Answer:")
+            st.markdown(f"**{response.strip()}**")
+            st.info(f"📄 Processed {page_count} page(s) from uploaded document.")
+        except Exception as e:
+            st.error(f"❌ Something went wrong while generating the answer.\n\n{e}")
+
+elif uploaded_pdf and submit and question == suggested[0]:
+    st.warning("⚠️ Please
