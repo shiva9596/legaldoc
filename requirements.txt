@@ -1,7 +1,7 @@
 streamlit
 PyPDF2
+docx2txt
 langchain
-langchain-community
-sentence-transformers
+openai
 faiss-cpu
-cohere
+python-dotenv
