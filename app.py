@@ -1,109 +1,79 @@
-import os
 import streamlit as st
-from dotenv import load_dotenv
+import os
+from uuid import uuid4
 from PyPDF2 import PdfReader
 import docx2txt
-import tempfile
-
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import CohereEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.chat_models import ChatOpenAI
+from langchain_community.chat_models import ChatCohere
 from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
+from langchain.text_splitter import CharacterTextSplitter
+from dotenv import load_dotenv
 
-# Load environment variables
+# Load .env if running locally (optional, harmless on Streamlit Cloud)
 load_dotenv()
-COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
-st.set_page_config(page_title="Legal Document AI", layout="centered")
+# Load Cohere API key
+cohere_api_key = os.getenv("COHERE_API_KEY")
+
+st.set_page_config(page_title="Legal Document Q&A", layout="wide")
 st.title("📄 Legal Document AI Assistant")
+st.markdown("Upload a legal document and ask questions. The assistant will retrieve relevant answers using Cohere + RAG.")
 
-# File uploader (PDF or Word)
-uploaded_file = st.file_uploader("📎 Upload a legal document (.pdf or .docx)", type=["pdf", "docx"])
-
-# Suggested & custom questions
-suggested_questions = [
-    "📌 What are the key clauses mentioned in this document?",
-    "📌 Are there any termination conditions?",
-    "📌 What are the penalties or liabilities?",
-    "📌 Is there a confidentiality agreement?",
-    "📌 Who are the involved parties?"
-]
-
-st.markdown("### 💡 Choose a suggested question or type your own:")
-col1, col2 = st.columns(2)
-with col1:
-    dropdown_question = st.selectbox("Suggested Questions", ["Select..."] + suggested_questions)
-with col2:
-    custom_question = st.text_input("Or write your own question")
-
-submit = st.button("🚀 Submit")
-
-# Text extraction from uploaded file
+# Helper: Extract text from PDF or DOCX
 def extract_text(file):
     if file.name.endswith(".pdf"):
         reader = PdfReader(file)
-        return "".join([page.extract_text() for page in reader.pages if page.extract_text()])
+        return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
     elif file.name.endswith(".docx"):
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
-            tmp.write(file.getvalue())
-            tmp_path = tmp.name
-        text = docx2txt.process(tmp_path)
-        os.remove(tmp_path)
-        return text
-    return None
+        return docx2txt.process(file)
+    else:
+        return ""
 
-# Decide final question
-final_question = None
-if custom_question.strip():
-    final_question = custom_question.strip()
-elif dropdown_question != "Select...":
-    final_question = dropdown_question
+# Upload Document
+uploaded_file = st.file_uploader("📤 Upload a legal PDF or DOCX file", type=["pdf", "docx"])
+if uploaded_file:
+    st.success("✅ File uploaded successfully!")
 
-# RAG workflow
-if uploaded_file and final_question and submit:
-    with st.spinner("Processing document..."):
-        raw_text = extract_text(uploaded_file)
+    # Extract and split text
+    text = extract_text(uploaded_file)
+    text_splitter = CharacterTextSplitter(separator="\n", chunk_size=1000, chunk_overlap=200)
+    chunks = text_splitter.split_text(text)
+    st.info(f"📄 Total Chunks: {len(chunks)} | 🧩 Total Pages (est.): {len(chunks)//3}")
 
-        if not raw_text:
-            st.error("❌ Unable to extract text from the document.")
+    # Display first 2 chunks optionally
+    with st.expander("🔍 Preview Sample Chunks"):
+        st.write(chunks[:2])
+
+    # Embed + VectorStore
+    embeddings = CohereEmbeddings(cohere_api_key=cohere_api_key)
+    vectorstore = FAISS.from_texts(chunks, embedding=embeddings)
+
+    # RAG pipeline setup
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=ChatCohere(cohere_api_key=cohere_api_key, model="command-r"),
+        retriever=vectorstore.as_retriever()
+    )
+
+    # Suggested Questions
+    st.subheader("💬 Ask a Question")
+    suggestions = [
+        "What is the contract duration?",
+        "Who are the parties involved?",
+        "Are there any termination clauses?",
+        "What is the risk assessment?",
+        "What are the financial obligations?"
+    ]
+    question = st.selectbox("Choose a question or type your own:", suggestions)
+    custom_question = st.text_input("Or ask your own question:")
+    final_question = custom_question if custom_question else question
+
+    # Submit button
+    if st.button("🧠 Get Answer"):
+        if final_question.strip() == "":
+            st.warning("⚠️ Please enter a valid question.")
         else:
-            splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-            docs = splitter.create_documents([raw_text])
-
-            embeddings = CohereEmbeddings(cohere_api_key=COHERE_API_KEY)
-            vectorstore = FAISS.from_documents(docs, embeddings)
-            retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-
-            prompt = PromptTemplate(
-                input_variables=["context", "question"],
-                template="""
-You are a helpful AI legal assistant. Use the context below to answer the user's question.
-
-If the answer is not present, respond: "I'm not sure based on the document."
-
-Context:
-{context}
-
-Question:
-{question}
-
-Answer:
-"""
-            )
-
-            llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.3)
-            qa_chain = RetrievalQA.from_chain_type(
-                llm=llm,
-                retriever=retriever,
-                chain_type="stuff",
-                chain_type_kwargs={"prompt": prompt}
-            )
-
-            answer = qa_chain.run(final_question)
-            st.success("📬 Answer:")
-            st.markdown(answer)
-
-elif uploaded_file and submit and not final_question:
-    st.warning("⚠️ Please enter or select a question.")
+            with st.spinner("Thinking..."):
+                answer = qa_chain.run(final_question)
+                st.success("✅ Answer:")
+                st.write(answer)
