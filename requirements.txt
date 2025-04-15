@@ -2,7 +2,7 @@ streamlit
 PyPDF2
 docx2txt
 langchain==0.1.17
-langchain-community>=0.0.36,<0.1
-cohere
+langchain-community==0.0.36
 faiss-cpu
+cohere
 python-dotenv
