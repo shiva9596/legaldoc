@@ -7,6 +7,15 @@ from langchain_community.vectorstores import FAISS
 from langchain.llms import Cohere
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
+import subprocess
+import sys
+
+# Automatically install langchain-community if not already installed
+try:
+    import langchain_community
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "langchain-community"])
+    import langchain_community
 
 st.set_page_config(page_title="Legal Doc AI Assistant", layout="centered")
 st.title("📄 Legal Document AI Assistant (Hugging Face Space)")
