@@ -1,79 +1,87 @@
-import streamlit as st
 import os
-from uuid import uuid4
+import streamlit as st
 from PyPDF2 import PdfReader
 import docx2txt
-from langchain_community.embeddings import CohereEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain_community.chat_models import ChatCohere
-from langchain.chains import RetrievalQA
-from langchain.text_splitter import CharacterTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores import FAISS
+from langchain.embeddings import CohereEmbeddings
+from cohere import Client
 from dotenv import load_dotenv
+from uuid import uuid4
 
-# Load .env if running locally (optional, harmless on Streamlit Cloud)
+# Load API Key
 load_dotenv()
-
-# Load Cohere API key
 cohere_api_key = os.getenv("COHERE_API_KEY")
+cohere_client = Client(api_key=cohere_api_key)
 
-st.set_page_config(page_title="Legal Document Q&A", layout="wide")
-st.title("📄 Legal Document AI Assistant")
-st.markdown("Upload a legal document and ask questions. The assistant will retrieve relevant answers using Cohere + RAG.")
+# --- Functions ---
 
-# Helper: Extract text from PDF or DOCX
 def extract_text(file):
-    if file.name.endswith(".pdf"):
+    if file.type == "application/pdf":
         reader = PdfReader(file)
-        return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
-    elif file.name.endswith(".docx"):
-        return docx2txt.process(file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() or ""
+        return text, len(reader.pages)
+    elif file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        text = docx2txt.process(file)
+        return text, "N/A"
     else:
-        return ""
+        return "", 0
 
-# Upload Document
-uploaded_file = st.file_uploader("📤 Upload a legal PDF or DOCX file", type=["pdf", "docx"])
-if uploaded_file:
-    st.success("✅ File uploaded successfully!")
+def chunk_text(text):
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+    return splitter.create_documents([text])
 
-    # Extract and split text
-    text = extract_text(uploaded_file)
-    text_splitter = CharacterTextSplitter(separator="\n", chunk_size=1000, chunk_overlap=200)
-    chunks = text_splitter.split_text(text)
-    st.info(f"📄 Total Chunks: {len(chunks)} | 🧩 Total Pages (est.): {len(chunks)//3}")
-
-    # Display first 2 chunks optionally
-    with st.expander("🔍 Preview Sample Chunks"):
-        st.write(chunks[:2])
-
-    # Embed + VectorStore
+def build_vectorstore(chunks):
     embeddings = CohereEmbeddings(cohere_api_key=cohere_api_key)
-    vectorstore = FAISS.from_texts(chunks, embedding=embeddings)
+    return FAISS.from_documents(chunks, embeddings)
 
-    # RAG pipeline setup
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=ChatCohere(cohere_api_key=cohere_api_key, model="command-r"),
-        retriever=vectorstore.as_retriever()
+def generate_answer(context, question):
+    response = cohere_client.chat(
+        message=question,
+        documents=[{"text": context}],
+        model="command-r"
     )
+    return response.text
 
-    # Suggested Questions
-    st.subheader("💬 Ask a Question")
-    suggestions = [
-        "What is the contract duration?",
-        "Who are the parties involved?",
-        "Are there any termination clauses?",
-        "What is the risk assessment?",
-        "What are the financial obligations?"
+# --- UI ---
+
+st.set_page_config(page_title="Legal Document Q&A Assistant", layout="centered")
+st.image("https://i.ibb.co/hVPCy6k/legal-header.png", use_column_width=True)
+st.title("📄 Legal Document Q&A Assistant")
+
+uploaded_file = st.file_uploader("Upload a PDF or DOCX file", type=["pdf", "docx"])
+
+if uploaded_file:
+    text, page_count = extract_text(uploaded_file)
+
+    if not text.strip():
+        st.warning("❌ No readable text found in the document.")
+        st.stop()
+
+    st.info(f"📄 Pages: {page_count if isinstance(page_count, int) else 'Unknown'}")
+
+    chunks = chunk_text(text)
+    st.info(f"🔍 Chunks Created: {len(chunks)}")
+
+    vectorstore = build_vectorstore(chunks)
+
+    suggested_questions = [
+        "What is the purpose of this document?",
+        "What are the main clauses?",
+        "Are there any liabilities mentioned?",
+        "What parties are involved?",
     ]
-    question = st.selectbox("Choose a question or type your own:", suggestions)
-    custom_question = st.text_input("Or ask your own question:")
-    final_question = custom_question if custom_question else question
+    st.markdown("#### 💡 Suggested Questions:")
+    for q in suggested_questions:
+        st.markdown(f"- {q}")
 
-    # Submit button
-    if st.button("🧠 Get Answer"):
-        if final_question.strip() == "":
-            st.warning("⚠️ Please enter a valid question.")
-        else:
-            with st.spinner("Thinking..."):
-                answer = qa_chain.run(final_question)
-                st.success("✅ Answer:")
-                st.write(answer)
+    final_question = st.text_input("Enter your question")
+
+    if st.button("🧠 Get Answer") and final_question:
+        docs = vectorstore.similarity_search(final_question, k=3)
+        context = "\n\n".join([doc.page_content for doc in docs])
+        answer = generate_answer(context, final_question)
+        st.success("✅ Answer:")
+        st.write(answer)
