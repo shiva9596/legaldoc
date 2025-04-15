@@ -71,7 +71,7 @@ os.environ["COHERE_API_KEY"] = cohere_key
 # Upload PDF
 uploaded_pdf = st.file_uploader("📎 Upload a legal PDF", type=["pdf"])
 
-# Dropdown Suggested Questions
+# Question Input Options
 suggested = [
     "Select a question...",
     "What are the key obligations mentioned in the document?",
@@ -80,13 +80,22 @@ suggested = [
     "Does the contract mention penalties or liabilities?"
 ]
 
-question = st.selectbox("❓ Ask your legal question here", options=suggested)
+st.markdown("### 💡 Choose a suggested question or write your own")
 
-# Submit Button
+dropdown_question = st.selectbox("Suggested Questions", options=suggested)
+custom_question = st.text_input("Or enter your custom question")
+
 submit = st.button("🚀 Submit Question")
 
-# Run model if conditions met
-if uploaded_pdf and submit and question != suggested[0]:
+# Determine which question to use
+final_question = None
+if custom_question.strip():
+    final_question = custom_question.strip()
+elif dropdown_question != suggested[0]:
+    final_question = dropdown_question
+
+# Run model if everything is ready
+if uploaded_pdf and submit and final_question:
     with st.spinner("Processing your document and question..."):
 
         # Extract PDF text
@@ -129,13 +138,12 @@ Answer:"""
 
         # Get Answer
         try:
-            response = qa_chain.run(question)
+            response = qa_chain.run(final_question)
             st.success("📬 AI-generated Answer:")
             st.markdown(f"**{response.strip()}**")
             st.info(f"📄 Processed {page_count} page(s) from uploaded document.")
         except Exception as e:
             st.error(f"❌ Something went wrong while generating the answer.\n\n{e}")
 
-elif uploaded_pdf and submit and question == suggested[0]:
-    st.warning("⚠️ Please select a valid question from the dropdown.")
-
+elif uploaded_pdf and submit and not final_question:
+    st.warning("⚠️ Please select a question from the dropdown or enter one manually.")
