@@ -15,16 +15,32 @@ import tempfile
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# App UI
+# Set Streamlit config
 st.set_page_config(page_title="Legal Document AI", layout="centered")
 st.title("📄 Legal Document AI Assistant")
 
 # File uploader
 uploaded_file = st.file_uploader("📎 Upload a legal document (.pdf or .docx)", type=["pdf", "docx"])
-question = st.text_input("💬 Ask a legal question")
+
+# Suggested and custom questions
+suggested_questions = [
+    "📌 What are the key clauses mentioned in this document?",
+    "📌 Are there any termination conditions?",
+    "📌 What are the penalties or liabilities?",
+    "📌 Is there a confidentiality agreement?",
+    "📌 Who are the involved parties?"
+]
+
+st.markdown("### 💡 Choose a suggested question or type your own:")
+col1, col2 = st.columns(2)
+with col1:
+    dropdown_question = st.selectbox("Suggested Questions", ["Select..."] + suggested_questions)
+with col2:
+    custom_question = st.text_input("Or write your own question")
+
 submit = st.button("🚀 Submit")
 
-# Extract text from uploaded file
+# Function to extract text from PDF or Word
 def extract_text(uploaded_file):
     if uploaded_file.name.endswith(".pdf"):
         reader = PdfReader(uploaded_file)
@@ -38,12 +54,19 @@ def extract_text(uploaded_file):
         return text
     return None
 
-# RAG logic
-if uploaded_file and question and submit:
-    with st.spinner("Processing..."):
+# Determine which question to use
+final_question = None
+if custom_question.strip():
+    final_question = custom_question.strip()
+elif dropdown_question != "Select...":
+    final_question = dropdown_question
+
+# Main RAG flow
+if uploaded_file and final_question and submit:
+    with st.spinner("Processing document..."):
         raw_text = extract_text(uploaded_file)
         if not raw_text:
-            st.error("❌ Could not extract text from the document.")
+            st.error("❌ Could not extract text from this document.")
         else:
             splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
             docs = splitter.create_documents([raw_text])
@@ -55,9 +78,8 @@ if uploaded_file and question and submit:
             prompt = PromptTemplate(
                 input_variables=["context", "question"],
                 template="""
-You are a helpful legal assistant. Use the context below to answer the user's question.
-
-If the answer is not in the document, say: "I'm not sure based on the document."
+You are a legal AI assistant. Use the following context to answer the user's question clearly and concisely.
+If you are unsure or the answer is not found, reply: "I'm not sure based on the document."
 
 Context:
 {context}
@@ -77,9 +99,9 @@ Answer:
                 chain_type_kwargs={"prompt": prompt}
             )
 
-            answer = qa_chain.run(question)
+            answer = qa_chain.run(final_question)
             st.success("📬 Answer:")
             st.markdown(answer)
 
-elif uploaded_file and submit and not question:
-    st.warning("⚠️ Please enter a question.")
+elif uploaded_file and submit and not final_question:
+    st.warning("⚠️ Please select or enter a question.")
