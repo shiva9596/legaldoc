@@ -7,9 +7,8 @@ from langchain.vectorstores import FAISS
 from langchain.embeddings import CohereEmbeddings
 from cohere import Client
 from dotenv import load_dotenv
-from uuid import uuid4
 
-# Load API Key
+# Load environment variables
 load_dotenv()
 cohere_api_key = os.getenv("COHERE_API_KEY")
 cohere_client = Client(api_key=cohere_api_key)
@@ -48,7 +47,7 @@ def generate_answer(context, question):
 # --- UI ---
 
 st.set_page_config(page_title="Legal Document Q&A Assistant", layout="centered")
-st.image("https://i.ibb.co/hVPCy6k/legal-header.png", use_column_width=True)
+st.image("https://i.ibb.co/hVPCy6k/legal-header.png", use_container_width=True)
 st.title("📄 Legal Document Q&A Assistant")
 
 uploaded_file = st.file_uploader("Upload a PDF or DOCX file", type=["pdf", "docx"])
@@ -67,17 +66,24 @@ if uploaded_file:
 
     vectorstore = build_vectorstore(chunks)
 
+    # Suggested questions dropdown
     suggested_questions = [
         "What is the purpose of this document?",
         "What are the main clauses?",
         "Are there any liabilities mentioned?",
         "What parties are involved?",
+        "What are the obligations and responsibilities?",
+        "What is the validity period or effective date?",
+        "Is there any termination clause?",
+        "Are there any confidentiality or NDA clauses?",
+        "What are the penalties or legal consequences?",
+        "Are there dispute resolution procedures?"
     ]
-    st.markdown("#### 💡 Suggested Questions:")
-    for q in suggested_questions:
-        st.markdown(f"- {q}")
 
-    final_question = st.text_input("Enter your question")
+    selected_question = st.selectbox("💡 Suggested Questions", [""] + suggested_questions)
+    manual_question = st.text_input("Or type your own question")
+
+    final_question = manual_question if manual_question else selected_question
 
     if st.button("🧠 Get Answer") and final_question:
         docs = vectorstore.similarity_search(final_question, k=3)
