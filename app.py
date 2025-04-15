@@ -1,122 +1,63 @@
 import os
 import streamlit as st
-from PyPDF2 import PdfReader
+from dotenv import load_dotenv
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain.llms import Cohere
-from langchain.prompts import PromptTemplate
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import FAISS
+from langchain.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
-import subprocess
-import sys
+from langchain.prompts import PromptTemplate
+from PyPDF2 import PdfReader
+import docx2txt
+import tempfile
 
-# Automatically install langchain-community if not already installed
-try:
-    import langchain_community
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "langchain-community"])
-    import langchain_community
+# Load environment variable
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Streamlit Config
-st.set_page_config(page_title="Legal Doc AI Assistant", layout="centered")
-
-# Custom Styling
-st.markdown("""
-    <style>
-    .stApp {
-        background: linear-gradient(to right, #e0f7fa, #fce4ec);
-        font-family: 'Segoe UI', sans-serif;
-    }
-
-    h1 {
-        color: #2c3e50;
-        text-align: center;
-        font-size: 2.8em;
-        margin-top: 0.5em;
-        margin-bottom: 0.3em;
-    }
-
-    .stFileUploader, .stTextInput, .stSelectbox, .stButton {
-        background-color: rgba(255, 255, 255, 0.75);
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
-    }
-
-    .stMarkdown {
-        background-color: rgba(255, 255, 255, 0.85);
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-
-    .stInfo {
-        background-color: rgba(230, 244, 255, 0.7);
-        color: #0277bd;
-        font-weight: bold;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-# Title
+# App UI
+st.set_page_config(page_title="Legal Document AI", layout="centered")
 st.title("📄 Legal Document AI Assistant")
 
-# API Key Handling
-cohere_key = os.getenv("COHERE_API_KEY")
-if not cohere_key:
-    st.error("Cohere API key not found. Please add it in Hugging Face Secrets.")
-    st.stop()
-os.environ["COHERE_API_KEY"] = cohere_key
+# File uploader
+uploaded_file = st.file_uploader("📎 Upload a legal document (.pdf or .docx)", type=["pdf", "docx"])
+question = st.text_input("💬 Ask a legal question")
+submit = st.button("🚀 Submit")
 
-# Upload PDF
-uploaded_pdf = st.file_uploader("📎 Upload a legal PDF", type=["pdf"])
+# Extract text from uploaded file
+def extract_text(uploaded_file):
+    if uploaded_file.name.endswith(".pdf"):
+        reader = PdfReader(uploaded_file)
+        return "".join([page.extract_text() for page in reader.pages if page.extract_text()])
+    elif uploaded_file.name.endswith(".docx"):
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
+            tmp.write(uploaded_file.getvalue())
+            tmp_path = tmp.name
+        text = docx2txt.process(tmp_path)
+        os.remove(tmp_path)
+        return text
+    return None
 
-# Question Input Options
-suggested = [
-    "Select a question...",
-    "What are the key obligations mentioned in the document?",
-    "Is there any mention of termination clauses?",
-    "What rights does the tenant have?",
-    "Does the contract mention penalties or liabilities?"
-]
+# RAG logic
+if uploaded_file and question and submit:
+    with st.spinner("Processing..."):
+        raw_text = extract_text(uploaded_file)
+        if not raw_text:
+            st.error("❌ Could not extract text from the document.")
+        else:
+            splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
+            docs = splitter.create_documents([raw_text])
 
-st.markdown("### 💡 Choose a suggested question or write your own")
+            embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
+            vectorstore = FAISS.from_documents(docs, embeddings)
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 
-dropdown_question = st.selectbox("Suggested Questions", options=suggested)
-custom_question = st.text_input("Or enter your custom question")
+            prompt = PromptTemplate(
+                input_variables=["context", "question"],
+                template="""
+You are a helpful legal assistant. Use the context below to answer the user's question.
 
-submit = st.button("🚀 Submit Question")
-
-# Determine which question to use
-final_question = None
-if custom_question.strip():
-    final_question = custom_question.strip()
-elif dropdown_question != suggested[0]:
-    final_question = dropdown_question
-
-# Run model if everything is ready
-if uploaded_pdf and submit and final_question:
-    with st.spinner("Processing your document and question..."):
-
-        # Extract PDF text
-        reader = PdfReader(uploaded_pdf)
-        raw_text = "".join([page.extract_text() for page in reader.pages if page.extract_text()])
-        page_count = len(reader.pages)
-
-        # Split text
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-        docs = splitter.create_documents([raw_text])
-
-        # Embeddings
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        vectorstore = FAISS.from_documents(docs, embeddings)
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-
-        # Prompt template
-        prompt = PromptTemplate(
-            input_variables=["context", "question"],
-            template="""
-You are a legal assistant AI. Use the following context to answer the user's legal question concisely and clearly.
+If the answer is not in the document, say: "I'm not sure based on the document."
 
 Context:
 {context}
@@ -124,26 +65,21 @@ Context:
 Question:
 {question}
 
-Answer:"""
-        )
+Answer:
+"""
+            )
 
-        # LLM
-        llm = Cohere(model="command-r-plus", temperature=0.3)
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=retriever,
-            chain_type_kwargs={"prompt": prompt}
-        )
+            llm = ChatOpenAI(openai_api_key=OPENAI_API_KEY, model_name="gpt-4", temperature=0.3)
+            qa_chain = RetrievalQA.from_chain_type(
+                llm=llm,
+                retriever=retriever,
+                chain_type="stuff",
+                chain_type_kwargs={"prompt": prompt}
+            )
 
-        # Get Answer
-        try:
-            response = qa_chain.run(final_question)
-            st.success("📬 AI-generated Answer:")
-            st.markdown(f"**{response.strip()}**")
-            st.info(f"📄 Processed {page_count} page(s) from uploaded document.")
-        except Exception as e:
-            st.error(f"❌ Something went wrong while generating the answer.\n\n{e}")
+            answer = qa_chain.run(question)
+            st.success("📬 Answer:")
+            st.markdown(answer)
 
-elif uploaded_pdf and submit and not final_question:
-    st.warning("⚠️ Please select a question from the dropdown or enter one manually.")
+elif uploaded_file and submit and not question:
+    st.warning("⚠️ Please enter a question.")
