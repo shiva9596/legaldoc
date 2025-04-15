@@ -137,4 +137,5 @@ Answer:"""
             st.error(f"❌ Something went wrong while generating the answer.\n\n{e}")
 
 elif uploaded_pdf and submit and question == suggested[0]:
-    st.warning("⚠️ Please
+    st.warning("⚠️ Please select a valid question from the dropdown.")
+
