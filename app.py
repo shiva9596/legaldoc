@@ -47,7 +47,7 @@ def generate_answer(context, question):
 # --- UI ---
 
 st.set_page_config(page_title="Legal Document Q&A Assistant", layout="centered")
-st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Legal_icon.png/640px-Legal_icon.png", use_container_width=True)
+#st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Legal_icon.png/640px-Legal_icon.png", use_container_width=True)
 st.title("📄 Legal Document Q&A Assistant")
 
 uploaded_file = st.file_uploader("Upload a PDF or DOCX file", type=["pdf", "docx"])
