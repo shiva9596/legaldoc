@@ -3,81 +3,81 @@ import streamlit as st
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 import docx
-import openai
+import cohere
 
 # Load environment variables
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+cohere_client = cohere.Client(os.getenv("COHERE_API_KEY"))
 
-# Function to extract text from PDF
+# -------- Helper Functions --------
 def extract_text_from_pdf(uploaded_file):
     reader = PdfReader(uploaded_file)
     text = ""
     for page in reader.pages:
-        text += page.extract_text() or ""
-    return text
+        page_text = page.extract_text()
+        if page_text:
+            text += page_text + "\n"
+    return text.strip()
 
-# Function to extract text from DOCX
 def extract_text_from_docx(uploaded_file):
     doc = docx.Document(uploaded_file)
-    return "\n".join([para.text for para in doc.paragraphs])
+    return "\n".join([para.text for para in doc.paragraphs if para.text.strip() != ""])
 
-# Function to query OpenAI (or any LLM)
 def query_llm(question, context):
-    prompt = f"""You are a legal assistant AI. Answer the question based on the following document content:
+    prompt = f"""You are a helpful legal assistant. Answer the question based on the document content below.
 
 Document:
 \"\"\"{context}\"\"\"
 
 Question: {question}
 Answer:"""
-    
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=500
+    response = cohere_client.chat(
+        message=prompt,
+        model="command-r",
+        temperature=0.3
     )
-    return response['choices'][0]['message']['content'].strip()
+    return response.text
 
-# Streamlit UI
+# -------- Streamlit UI --------
 st.set_page_config(page_title="Legal Document Q&A Assistant", page_icon="📄")
 st.title("📄 Legal Document Q&A Assistant")
-st.markdown("Upload a **PDF** or **DOCX** file")
+st.markdown("Upload a **PDF** or **DOCX** file to ask questions about its content.")
 
-uploaded_file = st.file_uploader("Upload Document", type=["pdf", "docx"])
+uploaded_file = st.file_uploader("📤 Upload your document", type=["pdf", "docx"])
 
 if uploaded_file:
-    file_ext = uploaded_file.name.split('.')[-1]
-    
+    ext = uploaded_file.name.split(".")[-1].lower()
     try:
-        if file_ext == "pdf":
+        if ext == "pdf":
             full_text = extract_text_from_pdf(uploaded_file)
-        elif file_ext == "docx":
+        elif ext == "docx":
             full_text = extract_text_from_docx(uploaded_file)
         else:
-            st.error("Unsupported file format")
+            st.error("Unsupported file format.")
             st.stop()
     except Exception as e:
-        st.error(f"Error reading file: {e}")
+        st.error(f"❌ Error reading file: {e}")
         st.stop()
 
-    st.success(f"✅ Document processed successfully ({len(full_text.split())} words)")
+    if full_text:
+        st.success(f"✅ Document processed successfully! ({len(full_text.split())} words)")
 
-    # Suggested questions
-    suggested_questions = [
-        "What is the main purpose of this document?",
-        "Who are the parties involved?",
-        "What are the key dates mentioned?",
-        "What legal obligations are specified?"
-    ]
+        st.markdown("### 💡 Suggested Questions")
+        suggested_questions = [
+            "What is the main purpose of this document?",
+            "Who are the parties involved?",
+            "Are there any important deadlines mentioned?",
+            "What legal obligations are specified?",
+            "Summarize the key takeaways from this document."
+        ]
 
-    st.markdown("### 💡 Suggested Questions")
-    selected_question = st.selectbox("Choose a question or ask your own:", suggested_questions)
-    custom_question = st.text_input("Or ask your own:", value=selected_question)
+        selected_question = st.selectbox("Choose a suggested question:", suggested_questions)
+        user_question = st.text_input("Or ask your own question:", value=selected_question)
 
-    if st.button("🔍 Submit Question"):
-        with st.spinner("Generating answer..."):
-            answer = query_llm(custom_question, full_text)
-        st.markdown("### 🧠 Answer")
-        st.write(answer)
+        if st.button("🔍 Submit"):
+            with st.spinner("Generating an answer..."):
+                answer = query_llm(user_question, full_text)
+            st.markdown("### 🧠 Answer")
+            st.write(answer)
+    else:
+        st.warning("The uploaded document appears to be empty.")
