@@ -65,3 +65,9 @@ streamlit run app.py
 ## 📄 License
 
 MIT License
+
+## Project Live Demo
+The project is live! You can check it out at the following link below:
+```bash
+https://p9qikwkggvsjf7jdgdqtvc.streamlit.app/
+```
