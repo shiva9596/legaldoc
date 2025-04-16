@@ -1,93 +1,83 @@
 import os
 import streamlit as st
-from PyPDF2 import PdfReader
-import docx2txt
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
-from langchain.embeddings import CohereEmbeddings
-from cohere import Client
 from dotenv import load_dotenv
+from PyPDF2 import PdfReader
+import docx
+import openai
 
 # Load environment variables
 load_dotenv()
-cohere_api_key = os.getenv("COHERE_API_KEY")
-cohere_client = Client(api_key=cohere_api_key)
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# --- Functions ---
+# Function to extract text from PDF
+def extract_text_from_pdf(uploaded_file):
+    reader = PdfReader(uploaded_file)
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text() or ""
+    return text
 
-def extract_text(file):
-    if file.type == "application/pdf":
-        reader = PdfReader(file)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text() or ""
-        return text, len(reader.pages)
-    elif file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        text = docx2txt.process(file)
-        return text, "N/A"
-    else:
-        return "", 0
+# Function to extract text from DOCX
+def extract_text_from_docx(uploaded_file):
+    doc = docx.Document(uploaded_file)
+    return "\n".join([para.text for para in doc.paragraphs])
 
-def chunk_text(text):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-    return splitter.create_documents([text])
+# Function to query OpenAI (or any LLM)
+def query_llm(question, context):
+    prompt = f"""You are a legal assistant AI. Answer the question based on the following document content:
 
-def build_vectorstore(chunks):
-    embeddings = CohereEmbeddings(cohere_api_key=cohere_api_key)
-    return FAISS.from_documents(chunks, embeddings)
+Document:
+\"\"\"{context}\"\"\"
 
-def generate_answer(context, question):
-    response = cohere_client.chat(
-        message=question,
-        documents=[{"text": context}],
-        model="command-r"
+Question: {question}
+Answer:"""
+    
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2,
+        max_tokens=500
     )
-    return response.text
+    return response['choices'][0]['message']['content'].strip()
 
-# --- UI ---
-
-st.set_page_config(page_title="Legal Document Q&A Assistant", layout="centered")
-#st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Legal_icon.png/640px-Legal_icon.png", use_container_width=True)
+# Streamlit UI
+st.set_page_config(page_title="Legal Document Q&A Assistant", page_icon="📄")
 st.title("📄 Legal Document Q&A Assistant")
+st.markdown("Upload a **PDF** or **DOCX** file")
 
-uploaded_file = st.file_uploader("Upload a PDF or DOCX file", type=["pdf", "docx"])
+uploaded_file = st.file_uploader("Upload Document", type=["pdf", "docx"])
 
 if uploaded_file:
-    text, page_count = extract_text(uploaded_file)
-
-    if not text.strip():
-        st.warning("❌ No readable text found in the document.")
+    file_ext = uploaded_file.name.split('.')[-1]
+    
+    try:
+        if file_ext == "pdf":
+            full_text = extract_text_from_pdf(uploaded_file)
+        elif file_ext == "docx":
+            full_text = extract_text_from_docx(uploaded_file)
+        else:
+            st.error("Unsupported file format")
+            st.stop()
+    except Exception as e:
+        st.error(f"Error reading file: {e}")
         st.stop()
 
-    st.info(f"📄 Pages: {page_count if isinstance(page_count, int) else 'Unknown'}")
+    st.success(f"✅ Document processed successfully ({len(full_text.split())} words)")
 
-    chunks = chunk_text(text)
-    st.info(f"🔍 Chunks Created: {len(chunks)}")
-
-    vectorstore = build_vectorstore(chunks)
-
-    # Suggested questions dropdown
+    # Suggested questions
     suggested_questions = [
-        "What is the purpose of this document?",
-        "What are the main clauses?",
-        "Are there any liabilities mentioned?",
-        "What parties are involved?",
-        "What are the obligations and responsibilities?",
-        "What is the validity period or effective date?",
-        "Is there any termination clause?",
-        "Are there any confidentiality or NDA clauses?",
-        "What are the penalties or legal consequences?",
-        "Are there dispute resolution procedures?"
+        "What is the main purpose of this document?",
+        "Who are the parties involved?",
+        "What are the key dates mentioned?",
+        "What legal obligations are specified?"
     ]
 
-    selected_question = st.selectbox("💡 Suggested Questions", [""] + suggested_questions)
-    manual_question = st.text_input("Or type your own question")
+    st.markdown("### 💡 Suggested Questions")
+    selected_question = st.selectbox("Choose a question or ask your own:", suggested_questions)
+    custom_question = st.text_input("Or ask your own:", value=selected_question)
 
-    final_question = manual_question if manual_question else selected_question
-
-    if st.button("🧠 Get Answer") and final_question:
-        docs = vectorstore.similarity_search(final_question, k=3)
-        context = "\n\n".join([doc.page_content for doc in docs])
-        answer = generate_answer(context, final_question)
-        st.success("✅ Answer:")
+    if st.button("🔍 Submit Question"):
+        with st.spinner("Generating answer..."):
+            answer = query_llm(custom_question, full_text)
+        st.markdown("### 🧠 Answer")
         st.write(answer)
