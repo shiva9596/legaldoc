@@ -6,3 +6,4 @@ langchain-community==0.0.36
 faiss-cpu
 cohere
 python-dotenv
+python-docx
