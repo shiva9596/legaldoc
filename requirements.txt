@@ -1,9 +1,10 @@
 streamlit
 PyPDF2
-cohere
-docx2txt
 python-docx
 python-dotenv
+
+openai>=1.0.0
+
 langchain==0.1.17
 langchain-community==0.0.36
 faiss-cpu
