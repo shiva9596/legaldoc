@@ -7,7 +7,7 @@ from openai import OpenAI
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 
 # -------------------------------------------------
 # Environment & Client Setup
@@ -100,7 +100,7 @@ def build_vector_store(pages):
                 }
             )
 
-    embeddings = OpenAIEmbeddings()
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
     texts = [d["content"] for d in docs]
     metadatas = [{"page": d["page"]} for d in docs]
 
