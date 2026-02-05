@@ -1,7 +1,10 @@
 streamlit[pdf]
 openai>=1.0.0
+
 langchain==0.1.17
 langchain-community==0.0.36
+langchain-openai
+
 faiss-cpu
 PyPDF2
 python-docx
