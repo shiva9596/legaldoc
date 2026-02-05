@@ -1,72 +1,99 @@
+# ⚖️ Legal Document AI Assistant
 
-# 📄 Legal Document AI Assistant
+An AI-powered **Streamlit application** that enables users to upload legal documents (PDF or Word), ask natural-language legal questions, and receive **accurate, context-aware answers** using **Retrieval-Augmented Generation (RAG)** with OpenAI and FAISS.
 
-An AI-powered Streamlit application that allows users to upload legal documents (PDF or Word), ask legal questions, and receive intelligent, context-aware answers using Cohere embeddings and a GPT-based language model via LangChain.
+This project is designed for **legal document analysis**, ensuring responses are strictly grounded in the uploaded content with **clear source citations**.
 
 ---
 
-## 🚀 Features
+## 🚀 Key Features
 
-- 🗂 Uploads: Supports **PDF (.pdf)** and **Word (.docx)** legal documents
-- 🧠 AI-Powered Q&A: Uses **RAG (Retrieval-Augmented Generation)** for accurate responses
-- 🔍 Vector Search: FAISS vector store for fast document chunk retrieval
-- 💬 Question Input: Choose from suggested legal questions or type your own
-- 🧾 Secure: API keys loaded via `.env` file
-- 🧠 Powered by:
-  - [LangChain](https://www.langchain.com/)
-  - [OpenAI / GPT-3.5 / GPT-4](https://platform.openai.com/)
+- 📄 **Document Upload**
+  - Supports **PDF (.pdf)** and **Word (.docx)** files
+- 💬 **Chat-Style Q&A Interface**
+  - Ask follow-up questions conversationally
+- 🧠 **Retrieval-Augmented Generation (RAG)**
+  - Intelligent chunking and semantic search for precise answers
+- 🔍 **Vector Search with FAISS**
+  - Fast similarity search across document chunks
+- 🧾 **Source Citations**
+  - Answers reference relevant document pages
+- ⚡ **Streaming Responses**
+  - Answers stream in real time for a better user experience
+- 👀 **In-App PDF Preview**
+  - Preview uploaded PDFs directly in the sidebar
+- 🎨 **Custom Theming**
+  - Professional dark UI using Streamlit theming
+- ☁️ **Streamlit Cloud Ready**
+  - Secure API key handling via Streamlit Secrets
+
+---
+
+## 🧠 Tech Stack
+
+- **Frontend / App Framework**
+  - Streamlit
+- **LLM & Embeddings**
+  - OpenAI (GPT-4o-mini, text-embedding-3-small)
+- **RAG Framework**
+  - LangChain
+- **Vector Store**
+  - FAISS
+- **Document Parsing**
+  - PyPDF2, python-docx
 
 ---
 
 ## 🛠 Setup Instructions
 
-### 1. Clone the repository
+### 1️⃣ Clone the Repository
 
 ```bash
 git clone https://github.com/shiva9596/legaldoc.git
 cd legaldoc
-```
+2️⃣ Configure Environment Variables
+Option A: Streamlit Cloud (Recommended)
+Add the following in Streamlit → App Settings → Secrets:
 
-### 2. Create and populate `.env`
-
-```env
-OPENAI_API_KEY=your-OPENAI-api-key
-```
-
-### 3. Install dependencies
-
-```bash
+OPENAI_API_KEY = "your-openai-api-key"
+Option B: Local .env File
+OPENAI_API_KEY=your-openai-api-key
+3️⃣ Install Dependencies
 pip install -r requirements.txt
-```
-
-### 4. Run the app locally
-
-```bash
+4️⃣ Run the App Locally
 streamlit run app.py
-```
+📎 Supported File Formats
+PDF (.pdf)
 
-## 📎 Supported File Formats
+Word Document (.docx)
 
-- PDF (`.pdf`)
-- Word Document (`.docx`)
+💡 Example Questions
+What is the purpose of this agreement?
 
----
+Who are the parties involved?
 
-## 💡 Example Questions
+Are there any termination or renewal clauses?
 
-- What are the key clauses mentioned?
-- Are there any termination conditions?
-- What are the penalties or liabilities?
-- Is there a confidentiality agreement?
+What liabilities or penalties are mentioned?
 
----
+Is there a confidentiality or NDA clause?
 
-## 📄 License
+What deadlines or obligations are specified?
 
-MIT License
+🌐 Live Demo
+The application is deployed on Streamlit Cloud:
 
-## Project Live Demo
-The project is live! You can check it out at the following link below:
-```bash
+🔗 Live App:
 https://p9qikwkggvsjf7jdgdqtvc.streamlit.app/
-```
+
+📄 License
+This project is licensed under the MIT License.
+
+📌 Notes
+The assistant answers strictly based on the uploaded document
+
+If the information is not present, the model clearly states that
+
+Suitable for contract review, legal analysis, and compliance checks
+
+Easily extensible to multi-document comparison, clause highlighting, and exports
