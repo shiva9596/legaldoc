@@ -13,7 +13,6 @@ An AI-powered Streamlit application that allows users to upload legal documents 
 - 💬 Question Input: Choose from suggested legal questions or type your own
 - 🧾 Secure: API keys loaded via `.env` file
 - 🧠 Powered by:
-  - [Cohere](https://cohere.com/) embeddings
   - [LangChain](https://www.langchain.com/)
   - [OpenAI / GPT-3.5 / GPT-4](https://platform.openai.com/)
 
@@ -31,7 +30,7 @@ cd legaldoc
 ### 2. Create and populate `.env`
 
 ```env
-COHERE_API_KEY=your-cohere-api-key
+OPENAI_API_KEY=your-OPENAI-api-key
 ```
 
 ### 3. Install dependencies
