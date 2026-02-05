@@ -61,7 +61,7 @@ st.markdown(
 # Header
 # -------------------------------------------------
 st.title("⚖️ Legal Document AI Assistant")
-st.caption("Chat with legal documents using OpenAI + RAG")
+st.caption("Chat with legal documents using OpenAI + FAISS RAG")
 
 # -------------------------------------------------
 # Helpers: Text Extraction
@@ -76,12 +76,12 @@ def extract_text_from_pdf(uploaded_file):
     return pages
 
 def extract_text_from_docx(uploaded_file):
-    doc = docx.Document(uploaded_file)
-    full_text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+    document = docx.Document(uploaded_file)
+    full_text = "\n".join(p.text for p in document.paragraphs if p.text.strip())
     return [(1, full_text)]
 
 # -------------------------------------------------
-# RAG Setup
+# Build Vector Store
 # -------------------------------------------------
 def build_vector_store(pages):
     splitter = RecursiveCharacterTextSplitter(
@@ -89,25 +89,27 @@ def build_vector_store(pages):
         chunk_overlap=150,
     )
 
-    docs = []
+    texts = []
+    metadatas = []
+
     for page_num, text in pages:
         chunks = splitter.split_text(text)
         for chunk in chunks:
-            docs.append(
-                {
-                    "page": page_num,
-                    "content": chunk,
-                }
-            )
+            texts.append(chunk)
+            metadatas.append({"page": page_num})
 
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    texts = [d["content"] for d in docs]
-    metadatas = [{"page": d["page"]} for d in docs]
+    embeddings = OpenAIEmbeddings(
+        model="text-embedding-3-small"
+    )
 
-    return FAISS.from_texts(texts, embeddings, metadatas)
+    return FAISS.from_texts(
+        texts=texts,
+        embedding=embeddings,
+        metadatas=metadatas,
+    )
 
 # -------------------------------------------------
-# LLM Query (Streaming + Citations)
+# Query LLM (Streaming + Citations)
 # -------------------------------------------------
 def query_llm(question, vectorstore):
     docs = vectorstore.similarity_search(question, k=4)
@@ -120,37 +122,36 @@ def query_llm(question, vectorstore):
     system_prompt = (
         "You are a legal assistant. "
         "Answer strictly from the provided context. "
-        "Cite page numbers when relevant. "
-        "If the answer is not present, say so."
+        "If the answer is not present, say so clearly. "
+        "Cite page numbers when relevant."
     )
 
     user_prompt = f"""
 Context:
-\"\"\"{context}\"\"\"
+{context}
 
-Question: {question}
+Question:
+{question}
 """
-
-    stream = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=0.2,
-        stream=True,
-    )
 
     answer = ""
     placeholder = st.empty()
 
-    for chunk in stream:
-        if chunk.choices[0].delta.get("content"):
-            answer += chunk.choices[0].delta["content"]
-            placeholder.markdown(
-                f'<div class="answer-box">{answer}</div>',
-                unsafe_allow_html=True,
-            )
+    with client.responses.stream(
+        model="gpt-4o-mini",
+        input=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.2,
+    ) as stream:
+        for event in stream:
+            if event.type == "response.output_text.delta":
+                answer += event.delta
+                placeholder.markdown(
+                    f'<div class="answer-box">{answer}</div>',
+                    unsafe_allow_html=True,
+                )
 
     return answer, docs
 
@@ -164,7 +165,7 @@ with st.sidebar:
         type=["pdf", "docx"],
     )
 
-    if uploaded_file and uploaded_file.name.endswith(".pdf"):
+    if uploaded_file and uploaded_file.name.lower().endswith(".pdf"):
         st.subheader("👀 Preview")
         st.pdf(uploaded_file)
 
@@ -172,7 +173,7 @@ with st.sidebar:
 # Main App Logic
 # -------------------------------------------------
 if uploaded_file:
-    if uploaded_file.name.endswith(".pdf"):
+    if uploaded_file.name.lower().endswith(".pdf"):
         pages = extract_text_from_pdf(uploaded_file)
     else:
         pages = extract_text_from_docx(uploaded_file)
@@ -209,7 +210,7 @@ if uploaded_file:
             )
 
             st.markdown(
-                "<div class='citation'>Sources:</div>",
+                "<div class='citation'><b>Sources:</b></div>",
                 unsafe_allow_html=True,
             )
             for s in sources:
